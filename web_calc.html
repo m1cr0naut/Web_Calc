@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<!-- Benjamin Plotkin -->
+<!-- 11/4/2015 -->
+
+<html>
+   <head>
+      <meta charset = 'utf-8'>
+      <style>
+         /* let's set some default style values */
+         h1 {
+            font-family: tahoma, helvetica, sans-serif;
+            font-size: 1.5em;
+         }
+
+         h2 {
+            font-family: tahoma, helvetica, sans-serif;
+            font-size: 1.2em;
+         }
+
+         p {
+            font-family: tahoma, helvetica, sans-serif;
+            font-size: 1.0em;
+         }
+
+         /* main form frame */
+         #calcFrame {
+            padding: 10px;
+            left: 50%;
+            margin: auto;
+            background: white;
+            border-width: 6px;
+            border-color: black;
+            border-style: solid;
+         }
+
+         /* give our form some room */
+         #formCol {
+            width: 400px;
+         }
+
+         /* error messages */
+         .Error {
+            font-family: tahoma, helvetica, sans-serif;
+            font-size: 0.6em;
+            font-weight: bold;
+            color: red;
+         }
+      </style>
+
+      <script>
+         /* Calculator is a state machine, let's enumerate those states */
+         var states = {
+             READY: 0,
+             OP1_ENTRY: 1,
+             STORE_OP: 2,
+             OP2_ENTRY: 3,
+             CLEAR: 4,
+             ERROR: 5
+         };
+
+         // init our globals
+         var inField = false;
+         var calcState = states.READY;
+         var operator = '';
+         var op1 = op2 = 0;
+
+         /* button click handler */
+         function clickInput (ev) {
+            var button = ev.target;
+
+            // check for bad input
+            checkNaN(document.getElementById('result').value);
+
+            // have we clicked clear button?
+            if (button.hasAttribute('data-calc-clr')) {
+               clearCalc();
+            }
+
+            // otherwise, are we in error state?
+            else if (calcState == states.ERROR) {
+               // do nothing
+            }
+
+            // no errors?  okay, moving along...
+
+            // have we clicked a number button?
+            else if (button.hasAttribute('data-calc-num')) {
+               numInput (ev);
+            }
+
+            // have we clicked an operator button?
+            else if (button.hasAttribute('data-calc-op')) {
+               opInput (ev);
+            }
+
+            // have we clicked clear button?
+            else if (button.hasAttribute('data-calc-clr')) {
+               clearCalc();
+            }
+
+            // have we clicked equal button (at an appropriate time)?
+            else if (button.hasAttribute('data-calc-eq') &&
+               calcState == states.OP2_ENTRY) {
+               equalCalc();
+            }
+         }
+
+         /* input handlers */
+         // process number button input
+         function numInput (ev) {
+            var button = ev.target;
+            var x = button.getAttribute('data-calc-num');
+            // check state to provide proper input behavior
+            if (calcState == states.READY || calcState == states.OP1_ENTRY) {
+               calcState = states.OP1_ENTRY;
+               document.getElementById('result').value+=x;
+               checkNaN(document.getElementById('result').value);
+            }
+            if (calcState == states.STORE_OP) {
+               document.getElementById('result').value='';
+               calcState = states.OP2_ENTRY;
+            }
+            if (calcState == states.OP2_ENTRY) {
+               document.getElementById('result').value+=x;
+               checkNaN(document.getElementById('result').value);
+            }
+         }
+
+         // process operator button input
+         function opInput (ev) {
+            // get input
+            var button=ev.target;
+            // if we've already entered our second operand, force calc for next operation
+            if (calcState == states.OP2_ENTRY) {
+               equalCalc();
+            }
+            // if we're entering an operator for the first time
+            if (calcState == states.OP1_ENTRY || calcState == states.STORE_OP) {
+               calcState = states.STORE_OP;
+               // store operand1
+               op1 = parseInt(document.getElementById('result').value);
+               // store operator
+               operator = button.getAttribute('data-calc-op');
+            }
+            // check for bad input
+            checkNaN(document.getElementById('result').value);
+         }
+
+         /* HELPER FUNCTIONS */
+
+         // throw error on bad input
+         function checkNaN(numIn) {
+            if (isNaN(numIn)) {
+               document.getElementById('result').value='ERROR: press C';
+               calcState = states.ERROR;
+            }
+         }
+
+         // clear calc input field
+         function clearCalc() {
+            // reset state
+            calcState = states.READY;
+            // reset globals
+            operator = '';
+            op1 = op2 = 0;
+            // reset input field
+            document.getElementById('result').value='';
+         }
+
+         // compute expression result and display it
+         function equalCalc() {
+            // reset state so we can append additional operations
+            calcState = states.OP1_ENTRY;
+            // evaluate expression
+            op2 = parseInt(document.getElementById('result').value);
+
+            // which operator was selected?
+            switch (operator) {
+               case '*': // *
+                  op1 *= op2;
+                  break;
+               case '+': // +
+                  op1 += op2;
+                  break;
+               case '-': // -
+                  op1 -= op2;
+                  break;
+               case '/': // /
+                  op1 /= op2;
+                  op1 = op1|0; // chopping off mantissa by coercing float into int
+                  break;       // (thanks to J. Castello for the tip!)
+            }
+
+            // reset operator and second operand for next input
+            operator = '';
+            op2 = '';
+            // reset input field
+            document.getElementById('result').value=op1;
+         }
+
+         /* DIRECT CALC FIELD USER ACCESS MANAGEMENT */
+
+         // clear type input field
+         function enterField() {
+            if (!inField && calcState != states.ERROR) {
+               document.getElementById('result').value='';
+               inField = true;
+               if (calcState == states.OP2_ENTRY || calcState == states.STORE_OP) {
+                  calcState = states.OP2_ENTRY;
+               }
+               else {
+                  calcState = states.OP1_ENTRY;
+               }
+            }
+         }
+
+         // manage exit from field
+         function exitField() {
+            inField = false;
+         }
+
+         /* FORM VALIDATION */
+         function validateForm() {
+            // returns a boolean, true if valid
+            // reset error indicators
+            document.getElementById('calcFrame').style.backgroundColor='white';
+            document.getElementById('err_fname').innerHTML = '';
+            document.getElementById('err_lname').innerHTML = '';
+            document.getElementById('err_sID').innerHTML = '';
+            document.getElementById('err_bio').innerHTML = '';
+
+            // local vars for form data
+            var fname = document.getElementById('fname').value;
+            var lname = document.getElementById('lname').value;
+            var sID = document.getElementById('sID').value;
+            var bio = document.getElementById('bio').value;
+            var isValid = true;
+
+            // using RegEx strings formulated with assistance from J. Castello :)
+            // fname check
+            if (!/^[A-Z][a-z]*$/.test(fname)) {
+               document.getElementById('err_fname').innerHTML = 'Letters only, first letter capitalized';
+               document.getElementById('calcFrame').style.backgroundColor='yellow';
+               isValid = false;
+            }
+
+            // lname check
+            if (!/^[A-Z][a-z]*$/.test(lname)) {
+               document.getElementById('err_lname').innerHTML = 'Letters only, first letter capitalized';
+               document.getElementById('calcFrame').style.backgroundColor='yellow';
+               isValid = false;
+            }
+
+            // sID check
+            if (!/^[0-9]{9}/.test(sID)) {
+               document.getElementById('err_sID').innerHTML = 'Nine-digit number only';
+               document.getElementById('calcFrame').style.backgroundColor='yellow';
+               isValid = false;
+            }
+
+            // bio check
+            if (bio.trim() === '' || bio.trim().split(/\s+/).length > 25) {
+               document.getElementById('err_bio').innerHTML = '1 to 25 words required';
+               document.getElementById('calcFrame').style.backgroundColor='yellow';
+               isValid = false;
+            }
+            return isValid;
+         }
+
+         // helper function to present pop-up alert
+         function successAlert() {
+            var msg = 'Success!\n\nFirst Name: ' + document.getElementById('fname').value +
+               '\nLast Name: ' + document.getElementById('lname').value +
+               '\nStudent ID: ' + document.getElementById('sID').value +
+               '\nBiography: ' + document.getElementById('bio').value +
+               '\nCalculator Result: ' + document.getElementById('result').value;
+
+            // if we have saved hours worked
+            if(document.getElementById('totHours').textContent.trim() !== '') {
+               msg += '\nHours Worked This Week: ' + document.getElementById('totHours').textContent;
+            }
+            alert(msg);
+         }
+
+         /* FORM SAVING AND SUBMISSION */
+
+         // save calc field results
+         function calcSave(ev) {
+            // check if we have valid save input
+            var savedResult = document.getElementById('result').value;
+            checkNaN(savedResult);
+            // if we have bad data or no data, display error
+            if (calcState == states.ERROR || savedResult == '') {
+               document.getElementById('totHours').innerHTML = '';
+               document.getElementById('hourError').innerHTML = 'You have entered an invalid number of hours worked';
+            }
+            else {
+               document.getElementById('totHours').innerHTML = ' ' + savedResult;
+               document.getElementById('hourError').innerHTML = '';
+            }
+            ev.preventDefault();
+         }
+
+         // submit form
+         function calcSubmit(ev) {
+            // check if we have valid form inputs
+            if (validateForm()) {
+               // present success alert
+               successAlert();
+            }
+            ev.preventDefault();
+         }
+
+         /* let's set up our event listeners */
+         function init() {
+            var foo = document.querySelector('#calculatrice');
+            // our calculator button click listener
+            foo.addEventListener('click', clickInput, false);
+
+            // calculator display field keyboard input listener
+            var bar = document.querySelector('#result');
+            bar.addEventListener('focus', enterField, false);
+            bar.addEventListener('blur', exitField, false);
+
+            // calculator save button listener
+            var baz = document.querySelector('#but_save');
+            baz.addEventListener('click', calcSave, false);
+
+            // form submit button listener
+            var qux = document.querySelector('#userForm');
+            qux.addEventListener('submit', calcSubmit, false);
+            console.log('init completed');
+         }
+
+         /* the first javascript code to execute, at full page load */
+         window.addEventListener('load', init, false);
+      </script>
+      <title>Web Calc</title>
+   </head>
+   <body>
+      <div id='calcFrame'>
+         <table>
+            <tr>
+               <!-- Form Column -->
+               <td id = 'formCol'>
+                  <h1>User Profile</h1>
+                  <form id='userForm' method='get'>
+                     <p>First Name:
+                        <input type='text' id = 'fname'>
+                           <span id='err_fname' class = 'Error'></span>
+                     </p>
+                     <p>Last Name:
+                        <input type='text' id = 'lname'>
+                           <span id='err_lname' class = 'Error'></span>
+                     </p>
+                     <p>Student ID #:
+                        <input type='text' id = 'sID'>
+                           <span id='err_sID' class = 'Error'></span>
+                     </p>
+                     <p>Biography:
+                        <span id='err_bio' class = 'Error'></span>
+                     </p>
+                     <p>
+                        <textarea rows='12' cols='40' id='bio'></textarea>
+                     </p>
+                     <p>
+                        <input type = 'submit' id = 'but_submit' value = 'Submit'>
+                     </p>
+                     <span id="error"></span>
+                  </form>
+               </td>
+               <!-- Calc Column -->
+               <td style = 'vertical-align:top'>
+                  <h2>Hours Worked This Week:<span id = 'totHours'></span></h2>
+                  <p>
+                     <input type = 'text' id = 'result' value = '' autocomplete = 'off'>
+                        <span id = 'hourError' class ='Error'></span>
+                  </p>
+                  <p>
+                     <input type = 'button' id = 'but_save' value = 'Save'>
+                  </p>
+                  <!-- Button Matrix -->
+                  <table id='calculatrice'>
+                      <tr>
+                        <td><button type='button' data-calc-num='7'>7</button></td>
+                        <td><button type='button' data-calc-num='8'>8</button></td>
+                        <td><button type='button' data-calc-num='9'>9</button></td>
+                        <td><button type='button' data-calc-op='/'>/</button></td>
+                      </tr>
+                      <tr>
+                        <td><button type='button' data-calc-num='4'>4</button></td>
+                        <td><button type='button' data-calc-num='5'>5</button></td>
+                        <td><button type='button' data-calc-num='6'>6</button></td>
+                        <td><button type='button' data-calc-op='*'>*</button></td>
+                      </tr>
+                      <tr>
+                        <td><button type='button' data-calc-num='1'>1</button></td>
+                        <td><button type='button' data-calc-num='2'>2</button></td>
+                        <td><button type='button' data-calc-num='3'>3</button></td>
+                        <td><button type='button' data-calc-op='-'>-</button></td>
+                      </tr>
+                      <tr>
+                        <td><button type='button' data-calc-clr='C'>C</button></td>
+                        <td><button type='button' data-calc-num='0'>0</button></td>
+                        <td><button type='button' data-calc-eq='='>=</button></td>
+                        <td><button type='button' data-calc-op='+'>+</button></td>
+                      </tr>
+                  </table>
+               </td>
+            </tr>
+         </table>
+      </div>
+   </body>
+</html>
